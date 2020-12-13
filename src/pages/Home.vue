@@ -26,31 +26,68 @@ export default {
     props: ['networker'],
     data() {
         return {
-            state: !this.$cookies.get('snowgame-name') || this.$cookies.get('snowgame-name').length < 1 ? 0 : 3,
-            name: this.$cookies.get('snowgame-name')
+            state: !this.$cookies.get('snowgame-username') || this.$cookies.get('snowgame-username').length < 1 ? 0 : 3,
+            name: this.$cookies.get('snowgame-username')
         }
     },
     methods: {
         /* ux */
         landingPlayClicked: function () {
+            alert(this.$cookies.get('snowgame-username'));
+
             this.state = 1;
-            this.backendLogin();
-        },
 
-        /* networking */
-        backendLogin: function() {
-            this.networker.login().then((response) => {
-                if (!response || !response.data || !response.data.name) {
-                    this.state = 1;
-                    return;
-                }
+            const username = prompt("username");
+            const password = prompt("password");
 
-                this.$cookies.set('snowgame-name', response.data.name);
+            this.backendLogin({
+                username, password
+            }).then(() => {
+                alert("Logged in, welcome back.")
                 this.state = 3;
             }).catch(e => {
                 console.log(e);
-                this.state = 1;
+
+                this.backendRegister({
+                    username, password
+                }).then(() => {
+                    alert("Registered, welcome to the game.")
+                    this.state = 3;
+                }).catch(e2 => {
+                    alert("Sorry, we couldn't log you in.");
+                    console.log(e2);
+                    this.state = 0;
+                });
             });
+        },
+
+        /* networking */
+        backendRegister: async function({ username, password }) {
+            const response = await this.networker.register({
+                username, password
+            });
+
+            if (!response || !response.data) {
+                throw new Error('Unexpected response from server');
+            }
+
+            this.$cookies.set('snowgame-username', response.data.username);
+            this.$cookies.set('snowgame-token', response.data.token);
+            this.state = 3;
+        },
+
+        backendLogin: async function({ username, password }) {
+            const response = await this.networker.login({
+                username, password
+            });
+
+            if (!response || !response.data) {
+                throw new Error('Unexpected response from server');
+            }
+
+            this.$cookies.set('snowgame-username', response.data.username);
+            this.$cookies.set('snowgame-token', response.data.token);
+            this.state = 3;
         }
     }
 }

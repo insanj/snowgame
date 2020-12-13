@@ -9,6 +9,7 @@
     "preview": "vue-cli-service build && serve -s dist"
   },
   "dependencies": {
+    "axios": "^0.21.0",
     "core-js": "^3.6.5",
     "vue": "^2.6.11",
     "vue-cookies": "^1.7.4"
