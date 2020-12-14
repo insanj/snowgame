@@ -239,7 +239,6 @@ export default {
 
     cursor: pointer;
 
-
     transition: transform 0.5s;
 }
 

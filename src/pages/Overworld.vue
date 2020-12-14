@@ -23,7 +23,12 @@
             </div>
 
             <div v-for="npc in activatedNPCs" :key="npc.name" class="npc-activation" :style="heightForActivatedNPC(npc)">
-                <div>You'll need this! (says {{ npc.name }})</div>
+                <div class="npc-text" v-html="activatedNPCHTML" />
+
+                <div class="npc-button" v-if="activatedNPCButtonVisible">
+                    <div class="npc-button-text">Yes</div>
+                    <img src="../assets/spacebar.png" class="npc-button-spacebar" />
+                </div>
             </div>
         </div>
     </div>
@@ -50,6 +55,8 @@ export default {
             activatedSoundtrackTimes: {},
             soundtrack: null,
 
+            timeouts: [],
+
             // parsed backend for frontend purposes (also reactive because shallow)
             mapName: null,
             playerTop: 0,
@@ -57,6 +64,9 @@ export default {
             facing: null,
             mapWidth: 0,
             mapHeight: 0,
+            
+            activatedNPCHTML: '',
+            activatedNPCButtonVisible: false,
 
             // todo, needs to be shallower
             players: null,
@@ -216,6 +226,46 @@ export default {
 
             // tall_boy check
             if (this.activatedNPCs.find(npc => npc.name === 'tall_boy')) {
+                let i = 0;
+
+                this.activatedNPCHTML = '';
+
+                const tallBoyText = "Pretty cold down there, isn't it?\n\nI used to be small like you. Ha!\n\n";
+                const boldTallBoyText = "Do you wanna be like me?";
+                
+                const addBoldLetters = (completion) => {
+                    if (i > boldTallBoyText.length-1) {
+                        this.activatedNPCButtonVisible = true;
+                        return;
+                    }
+
+                    this.activatedNPCHTML = `${tallBoyText}<b>${boldTallBoyText.slice(0, i + 1)}</b>`
+                    i = i + 1;
+
+                    const newTimeout = setTimeout(() => {
+                        completion(completion);
+                    }, 50);
+                    this.timeouts.push(newTimeout);
+                }
+
+                const addOneMoreLetter = (completion) => {
+                    if (i > tallBoyText.length) {
+                        i = 0;
+                        addBoldLetters(addBoldLetters);
+                        return;
+                    }
+
+                    this.activatedNPCHTML = `${tallBoyText.slice(0, i+1)}`
+                    i = i + 1;
+
+                    const newTimeout = setTimeout(() => {
+                        completion(completion);
+                    }, 50);
+                    this.timeouts.push(newTimeout);
+                }
+
+                addOneMoreLetter(addOneMoreLetter);
+
                 this.originalSoundtrackTime = this.soundtrack.currentTime;
                 this.soundtrack.pause();
                 this.soundtrack.src = '';
@@ -224,8 +274,22 @@ export default {
                 this.soundtrack = new Audio(tallboySound);
                 this.soundtrack.volume = 0.3;
                 this.soundtrack.loop = true;
-                this.soundtrack.currentTime = this.activatedSoundtrackTimes['tall_boy'] ? this.activatedSoundtrackTimes['tall_boy'] : 0;
-                this.soundtrack.play();
+                this.soundtrack.load();
+
+                this.soundtrack.addEventListener("canplaythrough", () => {
+                    if (!this.soundtrack.paused) {
+                        return;
+                    }
+
+                    if (this.soundtrack.duration && this.activatedSoundtrackTimes['tall_boy']) {
+                        const lastTallBoyTime = this.activatedSoundtrackTimes['tall_boy'];
+                        this.soundtrack.currentTime = lastTallBoyTime < this.soundtrack.duration ? lastTallBoyTime : 0;
+                    } else {
+                        this.soundtrack.currentTime = 0;
+                    }
+
+                    this.soundtrack.play();
+                }, false);
             }
         },
 
@@ -235,6 +299,12 @@ export default {
             }
            
            if (this.activatedNPCs.find(npc => npc.name === 'tall_boy')) {
+               if (this.timeouts) {
+                   for (let t of this.timeouts) {
+                       clearTimeout(t);
+                   }
+               }
+
                 this.activatedSoundtrackTimes['tall_boy'] = this.soundtrack.currentTime;
                 this.soundtrack.pause();
                 this.soundtrack.currentTime = 0;
@@ -243,8 +313,16 @@ export default {
                 const randomSound = `/static/ambient_sparkles_background.mp3`;
                 this.soundtrack = new Audio(randomSound);
                 this.soundtrack.volume = 1.0;
-                this.soundtrack.currentTime = this.originalSoundtrackTime
-                this.soundtrack.play();
+                this.soundtrack.load();
+
+                this.soundtrack.addEventListener("canplaythrough", () => {
+                    if (!this.soundtrack.paused) {
+                        return;
+                    }
+
+                    this.soundtrack.currentTime = this.originalSoundtrackTime;
+                    this.soundtrack.play();
+                });
             }
 
             this.activatedNPCs = [];
@@ -560,15 +638,42 @@ export default {
 
 }
 
+@keyframes mapBackgroundAnimation {
+    0% {
+        background-position: 0% 0%;
+    }
+    20% {
+        background-position: 100% 0%;
+    }
+    40% {
+        background-position: 100% 100%;
+    }
+    60% {
+        background-position: 0% 100%;
+    }
+    80% {
+        background-position: 0% 0%;
+    }
+}
+
 #map {
     z-index: 0;
-    pointer-events: none;
     position: fixed;
+    cursor: url('/favicon.ico'), auto;
 
     top: 0;
     left: 0;
 
+    opacity: 0.3;
     background: rgba(255, 255, 255, 1);
+    background-image: url('../assets/snow_gradient.png');
+    background-position: 0% 0%;
+    background-size: 1000% 1000%;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+
+    animation: mapBackgroundAnimation 20s infinite;
+
     overflow: hidden;
 }
 
@@ -611,25 +716,81 @@ export default {
     object-fit: contain;
 }
 
+@keyframes activationAnimation {
+    0% {
+        opacity: 0.0;
+        transform: scale(0.3, 0.3) ;
+        margin-top: -100px;
+    }
+    5% {
+        opacity: 1.0;
+    }
+    50% {
+        margin-top: 0px;
+    }
+    90% {
+        transform: scale(1.07, 1.07);
+    }
+    100% {
+        transform: scale(1, 1);
+    }
+}
+
 .npc-activation {
+    pointer-events: none;
+
     z-index: 5000;
     position: fixed;
 
     width: 600px;
     height: 235px;
 
+    box-shadow: 0px 1px 10px rgba(0,0,0,0.1);
+
     background-image: url('../assets/text_box.png');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
+       
+    animation: activationAnimation 1s ease-in-out;
 }
 
-.npc-activation div {
+.npc-text {
     padding: 20px;
     font-family: cursive;
     font-size: 24px;
     text-align: left;
+
+    white-space: pre-line;
     line-height: 1;
+}
+
+.npc-button {
+    position: absolute;
+
+    font-family: 'Montserrat', Avenir, Helvetica, Arial, sans-serif;
+    text-align: left;
+    font-weight: 700;
+    font-size: 28px;
+
+    bottom: 8px;
+    left: 24px;
+}
+
+.npc-button-text {
+    display: inline;
+    vertical-align: middle;
+}
+
+.npc-button-spacebar {
+    margin-left: 10px;
+
+    width: 170px;
+    height: 50px;
+    object-fit: contain;
+    
+    display: inline;
+    vertical-align: middle;
 }
 
 </style>
