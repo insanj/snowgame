@@ -232,27 +232,31 @@ export default {
                 }
             }
 
+            let featureShouldBeOnTop = false;
+
             if (this.mapFeatures && this.mapFeatures.length > 0) {
                 for (let feature of this.mapFeatures) {
-                    const featureElement = document.getElementById(feature.name);
-                    if (!featureElement) {
+                    // const featureElement = document.getElementById(feature.name);
+                    // if (!featureElement) {
+                    //     continue;
+                    // }
+
+                    const featureLeft = parseInt(feature.mapleft, 10) + (parseInt(feature.width, 10) / 2);
+                    if (Math.abs(this.playerLeft - featureLeft) > parseInt(feature.width, 10) / 2) {
                         continue;
                     }
 
-                    const featureLeft = parseInt(feature.mapleft, 10) + (featureElement.clientWidth / 2);
-                    if (Math.abs(this.playerLeft - featureLeft) > 50) {
-                        continue;
-                    }
-
-                    const mapTopInt = parseInt(feature.maptop, 10) + featureElement.clientHeight;
-                    const topOffset = mapTopInt - 80;
-
-                    if (this.playerTop > topOffset) {
-                        styles = `${styles} z-index: 100;`;
+                    const mapTopInt = parseInt(feature.maptop, 10) + parseInt(feature.height, 10);
+                    if (Math.abs(this.playerTop - mapTopInt) > 100) {
+                        featureShouldBeOnTop = true;
                     } else {
-                        // do nothing
+                        featureShouldBeOnTop = false;
                     }
                 }
+            }
+
+            if (!featureShouldBeOnTop) {
+                styles = `${styles} z-index: 100;`;
             }
 
             return styles;
