@@ -26,7 +26,7 @@ import SocketNetworker from '../backend/SocketNetworker.js';
 import events from '../strings/events.js';
 
 const socketNetworker = new SocketNetworker();
-const VUE_APP_FRONTEND_URL = process.env.VUE_APP_FRONTEND_URL;
+// const VUE_APP_FRONTEND_URL = process.env.VUE_APP_FRONTEND_URL;
 
 export default {
     name: "Overworld",
@@ -60,7 +60,7 @@ export default {
 
         this.mapName = this.initialMapName;
 
-        const randomSound = `${VUE_APP_FRONTEND_URL}/static/title_music_1.mp3`;
+        const randomSound = `/static/title_music_1.mp3`;
         const soundtrack = new Audio(randomSound);
         soundtrack.loop = true; 
         soundtrack.play();

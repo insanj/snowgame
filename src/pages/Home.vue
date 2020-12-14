@@ -14,7 +14,7 @@
                 <h1>Snowgame</h1>
                 <p>a game as delightful as snow</p>
 
-                <button :disabled="state === 1" v-on:click.prevent="landingPlayClicked">
+                <button :disabled="state === 1" v-on:click="landingPlayClicked">
                     {{ state === 1 ? 'loading...' : 'play' }}
                 </button>
 
