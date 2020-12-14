@@ -208,6 +208,8 @@ export default {
         generatePlayerStyle() {
             let styles = `top: ${this.playerTop}px; left: ${this.playerLeft}px;`;
 
+            let npcShouldBeOnTop = false;
+
             if (this.npcs && this.npcs.length > 0) {
                 for (let npc of this.npcs) {
                     const mapLeftInt = parseInt(npc.mapleft, 10);
@@ -225,9 +227,9 @@ export default {
                     const topOffset = (mapTopInt + heightOfNPC) - 50;
 
                     if (this.playerTop > topOffset) {
-                        styles = `${styles} z-index: 100;`;
+                        // styles = `${styles} z-index: 100;`;
                     } else {
-                        // do nothing
+                        npcShouldBeOnTop = true;
                     }
                 }
             }
@@ -255,7 +257,7 @@ export default {
                 }
             }
 
-            if (!featureShouldBeOnTop) {
+            if (!featureShouldBeOnTop && !npcShouldBeOnTop) {
                 styles = `${styles} z-index: 100;`;
             }
 
