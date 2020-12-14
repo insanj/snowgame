@@ -4,7 +4,7 @@
         </div>
 
         <div v-if="socketMap && socketPlayerLocation" id="player" :style="playerStyle">
-            <img src="@/assets/SNOWHEAD_1.png" class="snowhead" />
+            <img src="@/assets/SNOWHEAD_1.png" class="snowhead" :style="snowheadStyle" />
             <div class="nametag">{{ username }}</div>
         </div>
 
@@ -14,7 +14,7 @@
         
         <div v-if="socketMap && socketPlayerLocation && players && players.length > 0">
             <div v-for="player in players" id="player" :style="`top: ${player.location.maptop}px; left: ${player.location.mapleft}px;`" :key="player.id">
-                <img src="@/assets/SNOWHEAD_1.png" class="snowhead" />
+                <img src="@/assets/SNOWHEAD_1.png" class="snowhead" :style="`transform: rotate(${player.location.facing}deg)`" />
                 <div class="nametag">{{ player.username }}</div>
             </div>
 
@@ -30,11 +30,18 @@
                     <img src="../assets/spacebar.png" class="npc-button-spacebar" />
                 </div>
             </div>
+
+            <div v-for="feature in mapFeatures" :key="feature.name" class="map-feature" :style="`top: ${feature.maptop}px; left: ${feature.mapleft}px;`">
+                <img :src="`/static/${feature.name}.png`" class="map-feature-image" :style="`width: ${feature.width}px; height: ${feature.height}px;`" :id="feature.name"/>
+            </div>
         </div>
+
+        <Snow />
     </div>
 </template>
 
 <script>
+import Snow from '../components/Snow.vue';
 import SocketNetworker from '../backend/SocketNetworker.js';
 import events from '../strings/events.js';
 
@@ -44,6 +51,9 @@ const socketNetworker = new SocketNetworker();
 export default {
     name: "Overworld",
     props: ['networker', 'username', 'token', 'initialMapName'],
+    components: {
+        Snow
+    },
     data() {
         return {
             // backend
@@ -61,7 +71,7 @@ export default {
             mapName: null,
             playerTop: 0,
             playerLeft: 0,
-            facing: null,
+            facing: 0,
             mapWidth: 0,
             mapHeight: 0,
             
@@ -72,10 +82,12 @@ export default {
             players: null,
             npcs: null,
             activatedNPCs: [],
+            mapFeatures: [],
 
             // frontend
             mapStyle: 'width: 0px; height: 0px;',
-            playerStyle: 'top: 0px; left: 0px;'
+            playerStyle: 'top: 0px; left: 0px;',
+            snowheadStyle: 'transform: rotate(0deg);',
         }
     },
     mounted() {
@@ -187,14 +199,23 @@ export default {
             const leftOffset = parseInt(npc.mapleft, 10) - 240;
             return `top: ${topOffset}px; left: ${leftOffset}px; `;
         },
+
+        generateSnowheadStyle() {
+            let styles = `transform: rotate(${this.facing}deg)`;
+            return styles;
+        },
+        
         generatePlayerStyle() {
             let styles = `top: ${this.playerTop}px; left: ${this.playerLeft}px;`;
 
             if (this.npcs && this.npcs.length > 0) {
                 for (let npc of this.npcs) {
-                    const { maptop } = npc;
+                    const mapLeftInt = parseInt(npc.mapleft, 10);
+                    if (Math.abs(this.playerLeft - mapLeftInt) > 50) {
+                        continue;
+                    }
 
-                    const mapTopInt = parseInt(maptop, 10);
+                    const mapTopInt = parseInt(npc.maptop, 10);
                     const npcElement = document.getElementById(npc.name);
                     if (!npcElement) {
                         continue;
@@ -206,7 +227,30 @@ export default {
                     if (this.playerTop > topOffset) {
                         styles = `${styles} z-index: 100;`;
                     } else {
-                        // do nothing be hidden
+                        // do nothing
+                    }
+                }
+            }
+
+            if (this.mapFeatures && this.mapFeatures.length > 0) {
+                for (let feature of this.mapFeatures) {
+                    const featureElement = document.getElementById(feature.name);
+                    if (!featureElement) {
+                        continue;
+                    }
+
+                    const featureLeft = parseInt(feature.mapleft, 10) + (featureElement.clientWidth / 2);
+                    if (Math.abs(this.playerLeft - featureLeft) > 50) {
+                        continue;
+                    }
+
+                    const mapTopInt = parseInt(feature.maptop, 10) + featureElement.clientHeight;
+                    const topOffset = mapTopInt - 80;
+
+                    if (this.playerTop > topOffset) {
+                        styles = `${styles} z-index: 100;`;
+                    } else {
+                        // do nothing
                     }
                 }
             }
@@ -432,7 +476,14 @@ export default {
                 somethingPressed = true;
             }
 
+            if (this.upPressed || this.rightPressed) {
+                this.facing = this.facing + 14;
+            } else if (this.downPressed || this.leftPressed) {
+                this.facing = this.facing - 14;
+            }
+
             this.playerStyle = this.generatePlayerStyle();
+            this.snowheadStyle = this.generateSnowheadStyle();
 
             if (somethingPressed) {
                 this.socketSetPlayerLocation({
@@ -521,6 +572,7 @@ export default {
             if (!this.socketMap) {
                 this.socketMap = map;
                 this.npcs = map.npcs;
+                this.mapFeatures = map.features;
 
                 this.mapWidth = map.width;
                 this.mapHeight = map.height;
@@ -535,9 +587,10 @@ export default {
             this.playerTop = parseInt(this.socketPlayerLocation.maptop, 10);
             this.playerLeft = parseInt(this.socketPlayerLocation.mapleft, 10);
             this.mapName = this.socketPlayerLocation.mapname;
-            this.facing = this.socketPlayerLocation.facing;
+            this.facing = parseInt(this.socketPlayerLocation.facing, 10);
 
             this.playerStyle = this.generatePlayerStyle();
+            this.snowheadStyle = this.generateSnowheadStyle();
         },
 
         socketSetPlayerLocationSuccess(data) {
@@ -683,7 +736,7 @@ export default {
 
     font-size: 60px;
 
-    transition: 0.5s ease-out;
+    transition: all 0.5s ease-out;
 }
 
 .snowhead {
@@ -691,6 +744,7 @@ export default {
     height: 50px;
 
     object-fit: contain;
+    transition: all 0.5s ease-out;
 }
 
 .nametag {
@@ -791,6 +845,20 @@ export default {
     
     display: inline;
     vertical-align: middle;
+}
+
+.map-feature {
+    z-index: 1;
+    pointer-events: none;
+    position: fixed;
+
+    font-size: 0px;
+
+    transition: 0.5s ease-out;
+}
+
+.map-feature-image {
+    object-fit: contain;
 }
 
 </style>
