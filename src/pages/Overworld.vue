@@ -1,5 +1,5 @@
 <template>
-    <div>
+    <div class="game">
         <div v-if="socketMap && socketPlayerLocation" id="map" :style="mapStyle">
         </div>
 
@@ -16,6 +16,14 @@
             <div v-for="player in players" id="player" :style="`top: ${player.location.maptop}px; left: ${player.location.mapleft}px;`" :key="player.id">
                 <img src="@/assets/SNOWHEAD_1.png" class="snowhead" />
                 <div class="nametag">{{ player.username }}</div>
+            </div>
+
+            <div v-for="npc in npcs" :id="npc.name" :style="`top: ${npc.maptop}px; left: ${npc.mapleft}px;`" :key="npc.id">
+                <img v-if="npc.name === 'tall_boy'" src="@/assets/tall_boy.png" :class="npc.name" />
+            </div>
+
+            <div v-for="npc in activatedNPCs" :key="npc.name" class="npc-activation" :style="heightForActivatedNPC(npc)">
+                <div>You'll need this! (says {{ npc.name }})</div>
             </div>
         </div>
     </div>
@@ -38,6 +46,10 @@ export default {
             socketPlayerLocation: null,
             socketPlayerLocationFromMap: false,
 
+            originalSoundtrackTime: 0,
+            activatedSoundtrackTimes: {},
+            soundtrack: null,
+
             // parsed backend for frontend purposes (also reactive because shallow)
             mapName: null,
             playerTop: 0,
@@ -45,7 +57,11 @@ export default {
             facing: null,
             mapWidth: 0,
             mapHeight: 0,
+
+            // todo, needs to be shallower
             players: null,
+            npcs: null,
+            activatedNPCs: [],
 
             // frontend
             mapStyle: 'width: 0px; height: 0px;',
@@ -60,10 +76,13 @@ export default {
 
         this.mapName = this.initialMapName;
 
-        const randomSound = `/static/title_music_1.mp3`;
-        const soundtrack = new Audio(randomSound);
-        soundtrack.loop = true; 
-        soundtrack.play();
+        const randomSound = `/static/ambient_sparkles_background.mp3`;
+        this.soundtrack = new Audio(randomSound);
+        this.soundtrack.play();
+        
+        window.onblur = () => {
+            this.handleWindowLoseFocus();
+        }
 
         window.addEventListener('keydown', event => {
             if (event.keyCode === 38) { 
@@ -86,6 +105,10 @@ export default {
                 this.handleRightUnpressed();
             } else if (event.keyCode === 40) {
                 this.handleDownUnpressed();
+            }
+
+            else if (event.keyCode === 32) { // spacebar
+                this.handleSpacebarUnpressed();
             }
         })
 
@@ -142,12 +165,89 @@ export default {
         }, 100);
     },
     methods: {
+        heightForActivatedNPC(npc) {
+            const mapTopInt = parseInt(npc.maptop, 10);
+            const npcElement = document.getElementById(npc.name);
+            if (!npcElement || npc.name !== 'tall_boy') {
+                return `top: ${npc.maptop}px; left: ${npc.mapleft}px; `;
+            }
+
+            const heightOfNPC = npcElement.clientHeight;
+            const topOffset = (mapTopInt + heightOfNPC) - 320;
+            const leftOffset = parseInt(npc.mapleft, 10) - 240;
+            return `top: ${topOffset}px; left: ${leftOffset}px; `;
+        },
         generatePlayerStyle() {
-            return `top: ${this.playerTop}px; left: ${this.playerLeft}px;`;
+            let styles = `top: ${this.playerTop}px; left: ${this.playerLeft}px;`;
+
+            if (this.npcs && this.npcs.length > 0) {
+                for (let npc of this.npcs) {
+                    const { maptop } = npc;
+
+                    const mapTopInt = parseInt(maptop, 10);
+                    const npcElement = document.getElementById(npc.name);
+                    if (!npcElement) {
+                        continue;
+                    }
+
+                    const heightOfNPC = npcElement.clientHeight;
+                    const topOffset = (mapTopInt + heightOfNPC) - 50;
+
+                    if (this.playerTop > topOffset) {
+                        styles = `${styles} z-index: 100;`;
+                    } else {
+                        // do nothing be hidden
+                    }
+                }
+            }
+
+            return styles;
         },
 
         generateMapStyle() {
             return `width: ${this.mapWidth}px; height: ${this.mapHeight}px;`;
+        },
+
+        /* triggers */
+        triggerActivatedNPCs() {
+            if (!this.activatedNPCs || this.activatedNPCs.length < 1) {
+                return;
+            }
+
+            // tall_boy check
+            if (this.activatedNPCs.find(npc => npc.name === 'tall_boy')) {
+                this.originalSoundtrackTime = this.soundtrack.currentTime;
+                this.soundtrack.pause();
+                this.soundtrack.src = '';
+                
+                const tallboySound = `/static/ambient_jazz_tallboy.mp3`;
+                this.soundtrack = new Audio(tallboySound);
+                this.soundtrack.volume = 0.3;
+                this.soundtrack.loop = true;
+                this.soundtrack.currentTime = this.activatedSoundtrackTimes['tall_boy'] ? this.activatedSoundtrackTimes['tall_boy'] : 0;
+                this.soundtrack.play();
+            }
+        },
+
+        untriggerActivatedNPCs() {
+            if (!this.activatedNPCs || this.activatedNPCs.length < 1) {
+                return;
+            }
+           
+           if (this.activatedNPCs.find(npc => npc.name === 'tall_boy')) {
+                this.activatedSoundtrackTimes['tall_boy'] = this.soundtrack.currentTime;
+                this.soundtrack.pause();
+                this.soundtrack.currentTime = 0;
+                this.soundtrack.src = '';
+
+                const randomSound = `/static/ambient_sparkles_background.mp3`;
+                this.soundtrack = new Audio(randomSound);
+                this.soundtrack.volume = 1.0;
+                this.soundtrack.currentTime = this.originalSoundtrackTime
+                this.soundtrack.play();
+            }
+
+            this.activatedNPCs = [];
         },
 
         /* frontend */
@@ -169,6 +269,13 @@ export default {
         },
 
         /** unpressed */
+        handleWindowLoseFocus() {
+            this.upPressed = false;
+            this.downPressed = false;
+            this.leftPressed = false;
+            this.rightPressed = false;    
+        },
+
         handleUpUnpressed() {
             this.upPressed = false;
         },
@@ -183,6 +290,45 @@ export default {
 
         handleRightUnpressed() {
             this.rightPressed = false;
+        },
+
+        handleSpacebarUnpressed() {
+            if (this.activatedNPCs && this.activatedNPCs.length > 0) {
+                this.untriggerActivatedNPCs();
+                return;
+            }
+
+            if (!this.npcs || this.npcs.length < 1) {
+                return;
+            }
+            
+            const npcsInRange = this.npcs.filter(npc => {
+                const { mapleft, maptop, range } = npc;
+
+                const diffHorizonally = Math.abs(parseInt(mapleft, 10) - this.playerLeft);
+
+                const mapTopInt = parseInt(maptop, 10);
+                const npcElement = document.getElementById(npc.name);
+                if (!npcElement) {
+                    return false;
+                }
+
+                const heightOfNPC = npcElement.clientHeight;
+                const topOffset = mapTopInt + heightOfNPC;
+
+                const diffVertically = Math.abs(topOffset - this.playerTop);
+                
+                const rangeInt = parseInt(range, 10);
+
+                if (diffHorizonally <= rangeInt && diffVertically <= rangeInt) {
+                    return true;
+                }
+
+                return false;
+            });
+            
+            this.activatedNPCs = npcsInRange ? npcsInRange : [];
+            this.triggerActivatedNPCs();
         },
 
         /* tick */
@@ -296,6 +442,7 @@ export default {
 
             if (!this.socketMap) {
                 this.socketMap = map;
+                this.npcs = map.npcs;
 
                 this.mapWidth = map.width;
                 this.mapHeight = map.height;
@@ -323,9 +470,20 @@ export default {
                 return;
             }
 
-            socketNetworker.emit(events.getMapPlayers, {
-                mapname: this.mapName
-            });
+            let existing = this.players ? this.players.find(p => p.username === username) : null;
+            if (!existing) {
+                socketNetworker.emit(events.getMapPlayers, {
+                    mapname: this.mapName
+                });
+
+                return;
+            } 
+
+            existing.location = location;
+
+            let updatedPlayers = this.players.filter(p => p.username !== username);
+            updatedPlayers.push(existing);
+            this.players = updatedPlayers;
         },
 
         socketGetMapPlayersSuccess(data) {
@@ -334,7 +492,18 @@ export default {
                 return; // ignore map that isn't the same as ours
             }
 
-            this.players = players.filter(p => p.username !== this.username);
+            const updated = players.filter(p => p.username !== this.username);
+            let merged = this.players ? this.players : [];
+            for (let player of updated) {
+                const index = merged.findIndex(p => p.id === player.id);
+                if (index > -1) {
+                    merged[index] = player;
+                } else {
+                    merged.push(player);
+                }
+            }
+            
+            this.players = merged;
         },
 
         /* socket sending end */
@@ -387,6 +556,10 @@ export default {
 
 <style scoped>
 
+.game {
+
+}
+
 #map {
     z-index: 0;
     pointer-events: none;
@@ -395,9 +568,7 @@ export default {
     top: 0;
     left: 0;
 
-    border: 1px solid black;
-
-    background: rgba(240, 255, 255, 1);
+    background: rgba(255, 255, 255, 1);
     overflow: hidden;
 }
 
@@ -415,12 +586,49 @@ export default {
     height: 50px;
 
     object-fit: contain;
-    
 }
 
 .nametag {
     font-size: 18px;
     font-weight: 800;
+    line-height: 1;
+}
+
+#tall_boy { /* container */
+    z-index: 50;
+    pointer-events: none;
+    position: fixed;
+
+    font-size: 0px;
+
+    transition: 0.5s ease-out;
+}
+
+.tall_boy { /* the boy himself */
+    width: 56px;
+    height: auto;
+
+    object-fit: contain;
+}
+
+.npc-activation {
+    z-index: 5000;
+    position: fixed;
+
+    width: 600px;
+    height: 235px;
+
+    background-image: url('../assets/text_box.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.npc-activation div {
+    padding: 20px;
+    font-family: cursive;
+    font-size: 24px;
+    text-align: left;
     line-height: 1;
 }
 
