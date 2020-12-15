@@ -8,7 +8,11 @@ const events = {
     getMap: 'snowgameGetMap',
     getMapSuccess: 'snowgameGetMapSuccess',
     getMapPlayers: 'snowgameGetMapPlayers',
-    getMapPlayersSuccess: 'snowgameGetMapPlayersSuccess'
-  }
+    getMapPlayersSuccess: 'snowgameGetMapPlayersSuccess',
+    getMapNPCInteractions: 'snowgameGetMapNPCInteractions',
+    getMapNPCInteractionsSuccess: 'snowgameGetMapNPCInteractionsSuccess',
+    createUserNPCInteractionAnswer: 'snowgameCreateUserNPCInteractionAnswer',
+    createUserNPCInteractionAnswerSuccess: 'snowgameCreateUserNPCInteractionAnswerSuccess'
+};
   
-  module.exports = events;
+module.exports = events;

@@ -26,6 +26,8 @@ export default class SocketNetworker {
         eventsToHandlers[events.getPlayerLocationSuccess] = this.handleGetPlayerLocationSuccess;
         eventsToHandlers[events.getMapSuccess] = this.handleGetMapSuccess;
         eventsToHandlers[events.getMapPlayersSuccess] = this.handleGetMapPlayersSuccess;
+        eventsToHandlers[events.getMapNPCInteractionsSuccess] = this.handleGetMapNPCInteractionsSuccess;
+        eventsToHandlers[events.createUserNPCInteractionAnswerSuccess] = this.handleCreateUserNPCInteractionAnswerSuccess;
 
         const referenceToThis = this;
         for (const [eventName, eventHandler] of Object.entries(eventsToHandlers)) {
@@ -130,6 +132,22 @@ export default class SocketNetworker {
 
         if (this.callbacks[events.getMapPlayersSuccess]) {
             this.callbacks[events.getMapPlayersSuccess](data);
+        }
+    }
+
+    handleGetMapNPCInteractionsSuccess(data) {
+        socketLog("get map npc interactions success")
+
+        if (this.callbacks[events.getMapNPCInteractionsSuccess]) {
+            this.callbacks[events.getMapNPCInteractionsSuccess](data);
+        }
+    }
+
+    handleCreateUserNPCInteractionAnswerSuccess(data) {
+        socketLog("create user npc interaction answer success")
+
+        if (this.callbacks[events.createUserNPCInteractionAnswerSuccess]) {
+            this.callbacks[events.createUserNPCInteractionAnswerSuccess](data);
         }
     }
 }

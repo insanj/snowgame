@@ -22,12 +22,16 @@
                 <img v-if="npc.name === 'tall_boy'" src="@/assets/tall_boy.png" :class="npc.name" />
             </div>
 
-            <div v-for="npc in activatedNPCs" :key="npc.name" class="npc-activation" :style="heightForActivatedNPC(npc)">
-                <div class="npc-text" v-html="activatedNPCHTML" />
+            <div v-if="activatedNPCHTML">
+                <div v-for="npc in activatedNPCs" :key="npc.name" class="npc-activation" :style="heightForActivatedNPC(npc)">
+                    <div class="npc-text" v-html="activatedNPCHTML" />
 
-                <div class="npc-button" v-if="activatedNPCButtonVisible">
-                    <div class="npc-button-text">Yes</div>
-                    <img src="../assets/spacebar.png" class="npc-button-spacebar" />
+                    <div v-if="activatedNPCButtonVisible">
+                        <div v-for="answer in activatedInteraction.answers" class="npc-button" :key="answer.id">
+                            <div v-if="answer.text" class="npc-button-text">{{ answer.text }}</div>
+                            <img v-if="answer.image" :src="`/static/${answer.image}.png`" class="npc-button-spacebar" />
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -35,13 +39,10 @@
                 <img :src="`/static/${feature.name}.png`" class="map-feature-image" :style="`width: ${feature.width}px; height: ${feature.height}px;`" :id="feature.name"/>
             </div>
         </div>
-
-        <Snow />
     </div>
 </template>
 
 <script>
-import Snow from '../components/Snow.vue';
 import SocketNetworker from '../backend/SocketNetworker.js';
 import events from '../strings/events.js';
 
@@ -52,7 +53,7 @@ export default {
     name: "Overworld",
     props: ['networker', 'username', 'token', 'initialMapName'],
     components: {
-        Snow
+        
     },
     data() {
         return {
@@ -66,6 +67,7 @@ export default {
             soundtrack: null,
 
             timeouts: [],
+            socketCreateUserNPCInteractionAnswerCompletion: null,
 
             // parsed backend for frontend purposes (also reactive because shallow)
             mapName: null,
@@ -77,6 +79,8 @@ export default {
             
             activatedNPCHTML: '',
             activatedNPCButtonVisible: false,
+            activatedInteraction: null,
+            activatedInteractionInProgress: false,
 
             // todo, needs to be shallower
             players: null,
@@ -107,25 +111,25 @@ export default {
         }
 
         window.addEventListener('keydown', event => {
-            if (event.keyCode === 38) { 
+            if (event.keyCode === 38 || event.keyCode === 87) { 
                 this.handleUpPressed();
-            } else if (event.keyCode === 37) {
+            } else if (event.keyCode === 37 || event.keyCode === 65) {
                 this.handleLeftPressed();
-            } else if (event.keyCode === 39) {
+            } else if (event.keyCode === 39 || event.keyCode === 68) {
                 this.handleRightPressed();
-            } else if (event.keyCode === 40) {
+            } else if (event.keyCode === 40 || event.keyCode === 83) {
                 this.handleDownPressed();
             }
         });
 
         window.addEventListener('keyup', event => {
-            if (event.keyCode === 38) { 
+            if (event.keyCode === 38 || event.keyCode === 87) { 
                 this.handleUpUnpressed();
-            } else if (event.keyCode === 37) {
+            } else if (event.keyCode === 37 || event.keyCode === 65) {
                 this.handleLeftUnpressed();
-            } else if (event.keyCode === 39) {
+            } else if (event.keyCode === 39 || event.keyCode === 68) {
                 this.handleRightUnpressed();
-            } else if (event.keyCode === 40) {
+            } else if (event.keyCode === 40 || event.keyCode === 83) {
                 this.handleDownUnpressed();
             }
 
@@ -175,6 +179,16 @@ export default {
             this.socketGetMapPlayersSuccess(data);
         };
 
+        socketCallbacks[events.getMapNPCInteractionsSuccess] = (data) => {
+            console.log("[Overworld.vue] socketCallbacks getMapNPCInteractionsSuccess");
+            this.socketGetMapNPCInteractionsSuccess(data);
+        };
+
+        socketCallbacks[events.createUserNPCInteractionAnswerSuccess] = (data) => {
+            console.log("[Overworld.vue] socketCallbacks createUserNPCInteractionAnswerSuccess");
+            this.socketCreateUserNPCInteractionAnswerSuccess(data);
+        };
+        
         socketNetworker.connect({
             url: socketURL,
             config: socketConfig,
@@ -274,53 +288,90 @@ export default {
                 return;
             }
 
-            // tall_boy check
-            if (this.activatedNPCs.find(npc => npc.name === 'tall_boy')) {
-                let i = 0;
+            const activated = this.activatedNPCs[0]; // only 1 at a time for now
 
-                this.activatedNPCHTML = '';
-
-                const tallBoyText = "Pretty cold down there, isn't it?\n\nI used to be small like you. Ha!\n\n";
-                const boldTallBoyText = "Do you wanna be like me?";
-                
-                const addBoldLetters = (completion) => {
-                    if (i > boldTallBoyText.length-1) {
-                        this.activatedNPCButtonVisible = true;
-                        return;
-                    }
-
-                    this.activatedNPCHTML = `${tallBoyText}<b>${boldTallBoyText.slice(0, i + 1)}</b>`
-                    i = i + 1;
-
-                    const newTimeout = setTimeout(() => {
-                        completion(completion);
-                    }, 50);
-                    this.timeouts.push(newTimeout);
+            // okay, first determine what the NPC wants to trigger by default
+            // and if the current user has already triggered that
+            const interactions = activated.interactions;
+            if (!interactions || interactions.length < 1) {
+                this.activatedNPCs = [];
+                return; // no interactions for this npc (FYI they should probably just be a map feature)
+            }
+            
+            const interactionsUserAnswered = interactions.filter(interaction => {
+                const answers = interaction.answers;
+                if (!answers || answers.length < 1) {
+                    return false; // no answers for this interaction (FYI this will probably get the user stuck)
                 }
 
-                const addOneMoreLetter = (completion) => {
-                    if (i > tallBoyText.length) {
-                        i = 0;
-                        addBoldLetters(addBoldLetters);
-                        return;
-                    }
+                const userAnswersExist = answers.find(answer => {
+                    return answer.userAnswers && answer.userAnswers.length > 0;
+                });
 
-                    this.activatedNPCHTML = `${tallBoyText.slice(0, i+1)}`
-                    i = i + 1;
+                if (userAnswersExist) {
+                    return true;
+                } else {
+                    return false;
+                }
+            });
 
-                    const newTimeout = setTimeout(() => {
-                        completion(completion);
-                    }, 50);
-                    this.timeouts.push(newTimeout);
+            let triggeredInteraction = null;
+
+            if (!interactionsUserAnswered || interactionsUserAnswered.length < 1) {
+                // ok, user has not answered anything so the triggering interaction is the
+                // default one listed on the npc
+
+                const defaultInteraction = interactions.find(interaction => {
+                    return interaction.id === activated.npcinteractionid;
+                });
+
+                if (!defaultInteraction) {
+                    // FYI no default interaction which mean we can't do anything at all now
+                    this.activatedNPCs = [];
+                    return;
                 }
 
-                addOneMoreLetter(addOneMoreLetter);
+                triggeredInteraction = defaultInteraction;
+            }
 
+            else {
+                // user has answered something so the next interaction is the one linked
+                // by the answered interaction. we can rely on the chronologically sorted list
+
+                const lastUserInteraction = interactionsUserAnswered[interactionsUserAnswered.length-1];
+
+                const answerUserChose = lastUserInteraction.answers.find(answer => {
+                    return answer.userAnswers && answer.userAnswers.length > 0;
+                });
+
+                const linkedNextInteraction = interactions.find(interaction => {
+                    return interaction.id === answerUserChose.nextnpcinteractionid;
+                });
+
+                triggeredInteraction = linkedNextInteraction;
+            }
+
+            if (!triggeredInteraction) {
+                this.activatedNPCs = [];
+                return; // no triggeredInteraction, nothing to do
+                // a possible situation: we reached end of convo. if we wanna loop the end item, link the end
+                // answer to the same interaction that spawned it FYI
+            }
+
+            // okay, we know triggeredInteraction is the one that has all the data
+            // we need so we can render it and start GOING!
+            const previouslyActivatedInteraction = this.activatedInteraction;
+            this.activatedInteraction = triggeredInteraction;
+
+            const thisInteractionHasSameSoundAsLastOne = previouslyActivatedInteraction && previouslyActivatedInteraction.sound && previouslyActivatedInteraction.sound === triggeredInteraction.sound; // this interaction has the same sound as the previous one, so keep it going for now
+
+            // step 1: play sound if it exists
+            if (triggeredInteraction.sound && !thisInteractionHasSameSoundAsLastOne) {
                 this.originalSoundtrackTime = this.soundtrack.currentTime;
                 this.soundtrack.pause();
                 this.soundtrack.src = '';
                 
-                const tallboySound = `/static/ambient_jazz_tallboy.mp3`;
+                const tallboySound = `/static/${triggeredInteraction.sound}.mp3`;
                 this.soundtrack = new Audio(tallboySound);
                 this.soundtrack.volume = 0.3;
                 this.soundtrack.loop = true;
@@ -331,8 +382,8 @@ export default {
                         return;
                     }
 
-                    if (this.soundtrack.duration && this.activatedSoundtrackTimes['tall_boy']) {
-                        const lastTallBoyTime = this.activatedSoundtrackTimes['tall_boy'];
+                    if (this.soundtrack.duration && this.activatedSoundtrackTimes[triggeredInteraction.id]) {
+                        const lastTallBoyTime = this.activatedSoundtrackTimes[triggeredInteraction.id];
                         this.soundtrack.currentTime = lastTallBoyTime < this.soundtrack.duration ? lastTallBoyTime : 0;
                     } else {
                         this.soundtrack.currentTime = 0;
@@ -341,6 +392,67 @@ export default {
                     this.soundtrack.play();
                 }, false);
             }
+
+            // step 2: show the text 1 character at a time, skipping over HTML element tags
+            this.activatedNPCHTML = '';
+
+            const interactionText = triggeredInteraction.text;
+                
+            this.activatedNPCButtonVisible = false;
+            this.activatedInteractionInProgress = true;
+
+            const addOneMoreLetter = (start, end, currentTag, completion) => {
+                if (end > interactionText.length) {
+                    this.activatedNPCButtonVisible = true;
+                    this.activatedInteractionInProgress = false;
+                    return;
+                }
+
+                if (currentTag) {
+                    this.activatedNPCHTML = `<${currentTag}>${interactionText.slice(start, end)}</${currentTag}>`;
+                } else {
+                    this.activatedNPCHTML = `${interactionText.slice(start, end)}`;
+                }
+                
+                let newEnd = end+1;
+                if (newEnd > interactionText.length) {
+                    this.activatedNPCButtonVisible = true;
+                    this.activatedInteractionInProgress = false;
+                    return;
+                }
+                
+                let newCurrentTag = null;
+                let newStart = start;
+
+                const nextChar = interactionText.slice(newEnd-1, newEnd);
+                if (nextChar === "<") {
+                    const tagEndIndex = interactionText.slice(newEnd+1).indexOf(">") + newEnd + 1;
+                    newEnd = tagEndIndex + 1;
+                }
+
+
+                // if (nextChar === "<") {
+                //     const startTagEndIndex = interactionText.slice(newEnd).findIndex(">") + newEnd + 2;
+
+                //     if (!currentTag) {
+                //         const tagText = interactionText.slice(newEnd+1, startTagEndIndex-1);
+                //         newCurrentTag = tagText;
+                //     } else {
+                //         newCurrentTag = null;
+                //     }
+
+                //     newStart = startTagEndIndex+1;
+                //     newEnd = startTagEndIndex+2;
+                // }
+
+                const newTimeout = setTimeout(() => {
+                    completion(newStart, newEnd, newCurrentTag, completion);
+                }, 50);
+
+                this.timeouts.push(newTimeout);
+            }
+
+            addOneMoreLetter(0, 1, null, addOneMoreLetter);
         },
 
         untriggerActivatedNPCs() {
@@ -348,14 +460,14 @@ export default {
                 return;
             }
            
-           if (this.activatedNPCs.find(npc => npc.name === 'tall_boy')) {
-               if (this.timeouts) {
-                   for (let t of this.timeouts) {
-                       clearTimeout(t);
-                   }
-               }
+            if (this.timeouts) {
+                for (let t of this.timeouts) {
+                    clearTimeout(t);
+                }
+            }
 
-                this.activatedSoundtrackTimes['tall_boy'] = this.soundtrack.currentTime;
+            if (this.activatedInteraction && this.activatedInteraction.sound) {
+                this.activatedSoundtrackTimes[this.activatedInteraction.id] = this.soundtrack.currentTime;
                 this.soundtrack.pause();
                 this.soundtrack.currentTime = 0;
                 this.soundtrack.src = '';
@@ -376,6 +488,8 @@ export default {
             }
 
             this.activatedNPCs = [];
+            this.activatedNPCHTML = '';
+            this.activatedInteraction = null;
         },
 
         /* frontend */
@@ -421,8 +535,63 @@ export default {
         },
 
         handleSpacebarUnpressed() {
+            if (this.activatedInteractionInProgress) {
+                return; // suppress spacebar if we are in the middle of an interaction
+            }
+
+            if (this.socketCreateUserNPCInteractionAnswerCompletion) {
+                return; // we are awaiting an answer save so just do something else instead
+            }
+
             if (this.activatedNPCs && this.activatedNPCs.length > 0) {
-                this.untriggerActivatedNPCs();
+                const possibleAnswers = this.activatedInteraction.answers;
+                if (!possibleAnswers || possibleAnswers.length < 1) {
+                    this.untriggerActivatedNPCs();
+                    return; // no answers so untrigger is fine
+                }
+
+                const spacebarAnswer = possibleAnswers.find(answer => answer.keycode === 32);
+                if (!spacebarAnswer) {
+                    // no spacebar answer, but a different answer, so ignore completely
+                    return;
+                }
+                
+                const saveAnswer = (completion) => {
+                    this.socketCreateUserNPCInteractionAnswerCompletion = completion;
+                    this.socketCreateUserNPCInteractionAnswer({
+                        username: this.username,
+                        npcinteractionanswerid: spacebarAnswer.id
+                    });
+                };
+
+                const nextInteractionId = spacebarAnswer.nextnpcinteractionid;
+                if (!nextInteractionId) {
+                    if (spacebarAnswer.ignoreuseranswer === 1) {
+                        this.untriggerActivatedNPCs();
+                    } else {
+                        saveAnswer(() => {
+                            this.untriggerActivatedNPCs();
+                        });
+                    }
+
+                    return; // no subsequent interaction so untrigger and move on
+                }
+
+                const nextInteraction = this.activatedNPCs[0].interactions.find(interaction => interaction.id === nextInteractionId);
+                if (!nextInteraction) {
+                    saveAnswer(() => {
+                        this.untriggerActivatedNPCs();
+                    });
+                    return; // we are SUPPOSED to have a subsequent interaction but we can't find it, so untrigger and move on
+                    // (we can assume this is because we are working on a new interaction but it isn't in the db yet)
+                }
+
+                // ok so we know we need to trigger the next interaction; this trigger code has it's own
+                // logic because it needs to run it based on what's in the db already, so altho we just
+                // found out what interaction to use, we can throw it out and trigger() will find it again
+                saveAnswer(() => {
+                    this.triggerActivatedNPCs();
+                });
                 return;
             }
 
@@ -461,6 +630,10 @@ export default {
 
         /* tick */
         tick() {
+            if (this.activatedNPCs && this.activatedNPCs.length > 0) {
+                return;
+            }
+
             let somethingPressed = false;
             if (this.upPressed) {
                 this.playerTop = Math.min(Math.max(this.playerTop - 10, 0), this.mapHeight - 50);
@@ -577,13 +750,17 @@ export default {
 
             if (!this.socketMap) {
                 this.socketMap = map;
-                this.npcs = map.npcs;
                 this.mapFeatures = map.features;
 
                 this.mapWidth = map.width;
                 this.mapHeight = map.height;
 
                 this.mapStyle = this.generateMapStyle();
+
+                this.socketGetMapNPCInteractions({
+                    username: this.username,
+                    mapname: map.mapname
+                });
             }
 
             if (!this.socketPlayerLocation) {
@@ -625,6 +802,7 @@ export default {
 
         socketGetMapPlayersSuccess(data) {
             const { players, mapname } = data;
+
             if (this.mapName !== mapname) {
                 return; // ignore map that isn't the same as ours
             }
@@ -641,6 +819,48 @@ export default {
             }
             
             this.players = merged;
+        },
+
+        socketGetMapNPCInteractionsSuccess(data) {
+            const { username, mapname, npcs } = data;
+
+            if (this.username !== username) {
+                return;
+            }
+            
+            if (this.mapName !== mapname) {
+                return; // ignore map that isn't the same as ours
+            }
+
+            this.npcs = npcs;
+        },
+
+        socketCreateUserNPCInteractionAnswerSuccess(data) {
+            const { username, npc } = data;
+
+            if (username !== this.username) {
+                return;
+            }
+
+            if (!this.npcs) {
+                return;
+            }
+
+            const updated = this.npcs.filter(existing => existing.id !== npc.id).concat([npc]);
+            this.npcs = updated;
+
+            if (this.activatedNPCs && this.activatedNPCs.length > 0) {
+                const matched = this.activatedNPCs.find(activated => activated.id == npc.id);
+                if (matched) {
+                    this.activatedNPCs = [npc]; // TODO remove activatedNPCs make it activatedNPC
+                }
+            }
+
+            if (this.socketCreateUserNPCInteractionAnswerCompletion) {
+                this.socketCreateUserNPCInteractionAnswerCompletion();
+                this.socketCreateUserNPCInteractionAnswerCompletion = null;
+                return;
+            }
         },
 
         /* socket sending end */
@@ -677,6 +897,57 @@ export default {
             });
         },
 
+        socketGetMapNPCInteractions({ username, mapname }) {
+            socketNetworker.emit(events.getMapNPCInteractions, {
+                username, mapname
+            });
+        },
+
+        socketCreateUserNPCInteractionAnswer({ username, npcinteractionanswerid }) {
+            socketNetworker.emit(events.createUserNPCInteractionAnswer, {
+                username, npcinteractionanswerid
+            });
+
+            // TODO remove tomorrow; simulates success event before its ever fired
+            let npcWithUpdates = this.activatedNPCs[0];
+
+            let interactions = npcWithUpdates.interactions;
+            let interactionWithAnswerIndex = interactions.findIndex(interaction => {
+                const answers = interaction.answers;
+                const matched = answers.find(answer => answer.id === npcinteractionanswerid);
+                if (matched) {
+                    return true;
+                } else {
+                    return false;
+                }
+            });
+
+            let interactionWithAnswer = interactions[interactionWithAnswerIndex];
+            interactionWithAnswer.answers = interactionWithAnswer.answers.map(answer => {
+                if (answer.id === npcinteractionanswerid) {
+                    let existing = answer.userAnswers;
+                    const newAnswer = {
+                        username, npcinteractionanswerid
+                    };
+
+                    if (existing) {
+                        existing.push(newAnswer);
+                        answer.userAnswers = existing;
+                    } else {
+                        answer.userAnswers = [newAnswer];
+                    }
+                }
+
+                return answer;
+            });
+
+            npcWithUpdates.interactions = interactions;
+
+            this.socketCreateUserNPCInteractionAnswerSuccess({
+                username, npc: npcWithUpdates
+            });
+        }
+
         // socketGetMapPlayers({ mapname }) {
         //     if (!mapname) {
         //         console.log("Missing parameters");
@@ -694,7 +965,9 @@ export default {
 <style scoped>
 
 .game {
-
+    position: relative;
+    width: 100%;
+    height: 100%;
 }
 
 @keyframes mapBackgroundAnimation {

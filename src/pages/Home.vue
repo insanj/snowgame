@@ -1,6 +1,5 @@
 <template>
-    <div class="home">
-        
+    <div class="home">        
         <div v-if="state === 0 || state === 1">
             <center>
                 <img src="@/assets/trees_mock.png" class="mock-two" />
@@ -24,7 +23,7 @@
 
         </div>
 
-        <div v-if="state === 3">
+        <div class="home-overworld" v-if="state === 3">
             <Overworld 
                 :networker="networker"
                 :username="username"
@@ -32,7 +31,6 @@
                 :initialMapName="initialMapName"
             />
         </div>
-
     </div>
 </template>
 
@@ -59,6 +57,7 @@ export default {
             initialMapName: 'start'
         }
     },
+   
     methods: {
         /* ux */
         landingPlayClicked: function () {
@@ -168,7 +167,14 @@ export default {
 
 .home {
     position: relative;
-    min-width: 1000px;
+    width: 1000px;
+    height: 1000px;
+}
+
+.home-overworld {
+    position: relative;
+    width: 100%;
+    height: 100%; 
 }
 
 .home-card {

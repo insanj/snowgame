@@ -9,6 +9,7 @@
     "preview": "vue-cli-service build && serve -s dist"
   },
   "dependencies": {
+    "amd-loader": "0.0.8",
     "axios": "^0.21.0",
     "core-js": "^3.6.5",
     "raw-loader": "^4.0.2",
