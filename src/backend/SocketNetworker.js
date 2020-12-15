@@ -1,6 +1,3 @@
-import dotenv from 'dotenv';
-dotenv.config()
-
 import io from 'socket.io-client';
 const events = require('../strings/events.js');
 
