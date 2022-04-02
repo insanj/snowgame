@@ -1,24 +1,17 @@
 # snowgame
 
-## Project setup
+☃ a game as delightful as snow; browser based mmorpg built with vue.js 
+
+<img src="https://insane.works/assets/images/snowgame.png" width="50%"/>
+
+## Authors
+
 ```
-npm install
+Julian @insanj Weiss
+github.com/insanj
+(c) 2022
 ```
 
-### Compiles and hot-reloads for development
-```
-npm run serve
-```
+## License
 
-### Compiles and minifies for production
-```
-npm run build
-```
-
-### Lints and fixes files
-```
-npm run lint
-```
-
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+See [LICENSE](LICENSE)
